@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sound Test - Tomm&Danny Café</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .sound-test {
+            margin: 15px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #e7f3ff;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔊 Sound Test - Tomm&Danny Café</h1>
+        
+        <div class="info">
+            <h3>Instructions:</h3>
+            <p>Click the buttons below to test each notification sound. Make sure your system volume is on and the browser has permission to play audio.</p>
+        </div>
+
+        <div class="sound-test">
+            <h3>🔔 New Order Sound</h3>
+            <p>Tests the sound that plays when a new order is received</p>
+            <button onclick="testSound('new-order')">Test New Order Sound</button>
+            <div id="status-new-order"></div>
+        </div>
+
+        <div class="sound-test">
+            <h3>🛎️ Service Request Sound</h3>
+            <p>Tests the sound that plays when a service request is made</p>
+            <button onclick="testSound('service-request')">Test Service Request Sound</button>
+            <div id="status-service-request"></div>
+        </div>
+
+        <div class="sound-test">
+            <h3>🚨 Urgent Order Sound</h3>
+            <p>Tests the sound that plays for urgent orders</p>
+            <button onclick="testSound('urgent')">Test Urgent Sound</button>
+            <div id="status-urgent"></div>
+        </div>
+
+        <div class="sound-test">
+            <h3>🧪 Test All Sounds</h3>
+            <p>Plays all three sounds in sequence</p>
+            <button onclick="testAllSounds()">Test All Sounds</button>
+            <div id="status-all"></div>
+        </div>
+
+        <div class="info">
+            <h3>Expected Results:</h3>
+            <ul>
+                <li>✅ You should hear a notification sound for each button</li>
+                <li>✅ The status should show "Sound played successfully"</li>
+                <li>❌ If you see an error, check browser permissions and volume</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const sounds = {
+            'new-order': '/sounds/new-order.wav',
+            'service-request': '/sounds/service-request.wav',
+            'urgent': '/sounds/urgent.wav'
+        };
+
+        function testSound(type) {
+            const statusDiv = document.getElementById(`status-${type}`);
+            statusDiv.innerHTML = '<div class="status">Playing sound...</div>';
+            
+            const audio = new Audio(sounds[type]);
+            audio.volume = 0.5;
+            
+            audio.addEventListener('canplaythrough', () => {
+                statusDiv.innerHTML = '<div class="status success">✅ Sound loaded successfully</div>';
+            });
+            
+            audio.addEventListener('error', (e) => {
+                statusDiv.innerHTML = '<div class="status error">❌ Error loading sound: ' + e.message + '</div>';
+            });
+            
+            audio.addEventListener('ended', () => {
+                statusDiv.innerHTML = '<div class="status success">✅ Sound played successfully</div>';
+            });
+            
+            audio.play().catch(error => {
+                statusDiv.innerHTML = '<div class="status error">❌ Error playing sound: ' + error.message + '</div>';
+            });
+        }
+
+        function testAllSounds() {
+            const statusDiv = document.getElementById('status-all');
+            statusDiv.innerHTML = '<div class="status">Playing all sounds...</div>';
+            
+            let currentIndex = 0;
+            const soundTypes = ['new-order', 'service-request', 'urgent'];
+            
+            function playNext() {
+                if (currentIndex >= soundTypes.length) {
+                    statusDiv.innerHTML = '<div class="status success">✅ All sounds played successfully</div>';
+                    return;
+                }
+                
+                const type = soundTypes[currentIndex];
+                const audio = new Audio(sounds[type]);
+                audio.volume = 0.5;
+                
+                audio.addEventListener('ended', () => {
+                    currentIndex++;
+                    setTimeout(playNext, 500); // Wait 500ms between sounds
+                });
+                
+                audio.play().catch(error => {
+                    statusDiv.innerHTML = '<div class="status error">❌ Error playing sound: ' + error.message + '</div>';
+                });
+            }
+            
+            playNext();
+        }
+
+        // Check if sounds exist
+        window.addEventListener('load', () => {
+            console.log('🔍 Checking sound files...');
+            Object.entries(sounds).forEach(([type, url]) => {
+                fetch(url, { method: 'HEAD' })
+                    .then(response => {
+                        if (response.ok) {
+                            console.log(`✅ ${type}: Found`);
+                        } else {
+                            console.log(`❌ ${type}: Not found`);
+                        }
+                    })
+                    .catch(error => {
+                        console.log(`❌ ${type}: Error checking - ${error.message}`);
+                    });
+            });
+        });
+    </script>
+</body>
+</html> 

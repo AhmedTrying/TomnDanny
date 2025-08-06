@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sound Generator - Tomm&Danny Café</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .sound-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        .sound-section h3 {
+            margin-top: 0;
+            color: #555;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .download-btn {
+            background: #28a745;
+        }
+        .download-btn:hover {
+            background: #1e7e34;
+        }
+        .instructions {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #007bff;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 Sound Generator - Tomm&Danny Café</h1>
+        
+        <div class="instructions">
+            <h3>Instructions:</h3>
+            <ol>
+                <li>Click "Generate" for each sound type to create a notification sound</li>
+                <li>Click "Download" to save the sound file</li>
+                <li>Place the downloaded files in your <code>public/sounds/</code> directory</li>
+                <li>Restart your development server and test the sounds</li>
+            </ol>
+        </div>
+
+        <div class="sound-section">
+            <h3>🔔 New Order Sound</h3>
+            <p>A pleasant notification sound for new orders</p>
+            <button onclick="generateNewOrderSound()">Generate New Order Sound</button>
+            <button class="download-btn" onclick="downloadSound('new-order')" id="download-new-order" disabled>Download new-order.mp3</button>
+            <div id="status-new-order"></div>
+        </div>
+
+        <div class="sound-section">
+            <h3>🛎️ Service Request Sound</h3>
+            <p>A different tone for service requests</p>
+            <button onclick="generateServiceRequestSound()">Generate Service Request Sound</button>
+            <button class="download-btn" onclick="downloadSound('service-request')" id="download-service-request" disabled>Download service-request.mp3</button>
+            <div id="status-service-request"></div>
+        </div>
+
+        <div class="sound-section">
+            <h3>🚨 Urgent Order Sound</h3>
+            <p>An attention-grabbing sound for urgent orders</p>
+            <button onclick="generateUrgentSound()">Generate Urgent Sound</button>
+            <button class="download-btn" onclick="downloadSound('urgent')" id="download-urgent" disabled>Download urgent.mp3</button>
+            <div id="status-urgent"></div>
+        </div>
+
+        <div class="sound-section">
+            <h3>🧪 Test All Sounds</h3>
+            <p>Test the generated sounds before downloading</p>
+            <button onclick="testAllSounds()">Test All Sounds</button>
+            <button onclick="downloadAllSounds()" class="download-btn">Download All Sounds</button>
+        </div>
+    </div>
+
+    <script>
+        let audioContext;
+        let sounds = {};
+
+        // Initialize audio context
+        function initAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        // Generate a simple notification sound
+        function generateSound(frequency, duration, type) {
+            initAudioContext();
+            
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+            oscillator.type = 'sine';
+            
+            gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.1);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + duration);
+            
+            return { oscillator, gainNode };
+        }
+
+        // Generate new order sound (pleasant chime)
+        function generateNewOrderSound() {
+            const status = document.getElementById('status-new-order');
+            status.innerHTML = '<div class="status">Generating new order sound...</div>';
+            
+            try {
+                // Create a pleasant chime sound
+                const sound1 = generateSound(800, 0.3, 'sine');
+                setTimeout(() => generateSound(1000, 0.3, 'sine'), 100);
+                setTimeout(() => generateSound(1200, 0.2, 'sine'), 400);
+                
+                // Create downloadable version
+                createDownloadableSound('new-order', [800, 1000, 1200], [0.3, 0.3, 0.2]);
+                
+                status.innerHTML = '<div class="status success">✅ New order sound generated successfully!</div>';
+                document.getElementById('download-new-order').disabled = false;
+            } catch (error) {
+                status.innerHTML = '<div class="status error">❌ Error generating sound: ' + error.message + '</div>';
+            }
+        }
+
+        // Generate service request sound (different tone)
+        function generateServiceRequestSound() {
+            const status = document.getElementById('status-service-request');
+            status.innerHTML = '<div class="status">Generating service request sound...</div>';
+            
+            try {
+                // Create a different tone for service requests
+                const sound1 = generateSound(600, 0.2, 'sine');
+                setTimeout(() => generateSound(800, 0.2, 'sine'), 200);
+                setTimeout(() => generateSound(600, 0.2, 'sine'), 400);
+                
+                // Create downloadable version
+                createDownloadableSound('service-request', [600, 800, 600], [0.2, 0.2, 0.2]);
+                
+                status.innerHTML = '<div class="status success">✅ Service request sound generated successfully!</div>';
+                document.getElementById('download-service-request').disabled = false;
+            } catch (error) {
+                status.innerHTML = '<div class="status error">❌ Error generating sound: ' + error.message + '</div>';
+            }
+        }
+
+        // Generate urgent sound (attention-grabbing)
+        function generateUrgentSound() {
+            const status = document.getElementById('status-urgent');
+            status.innerHTML = '<div class="status">Generating urgent sound...</div>';
+            
+            try {
+                // Create an attention-grabbing sound
+                const sound1 = generateSound(400, 0.1, 'sine');
+                setTimeout(() => generateSound(600, 0.1, 'sine'), 100);
+                setTimeout(() => generateSound(400, 0.1, 'sine'), 200);
+                setTimeout(() => generateSound(600, 0.1, 'sine'), 300);
+                setTimeout(() => generateSound(400, 0.1, 'sine'), 400);
+                
+                // Create downloadable version
+                createDownloadableSound('urgent', [400, 600, 400, 600, 400], [0.1, 0.1, 0.1, 0.1, 0.1]);
+                
+                status.innerHTML = '<div class="status success">✅ Urgent sound generated successfully!</div>';
+                document.getElementById('download-urgent').disabled = false;
+            } catch (error) {
+                status.innerHTML = '<div class="status error">❌ Error generating sound: ' + error.message + '</div>';
+            }
+        }
+
+        // Create downloadable sound file
+        function createDownloadableSound(name, frequencies, durations) {
+            // For now, we'll create a simple audio blob
+            // In a real implementation, you'd want to use a proper audio library
+            const audioBlob = new Blob(['audio data'], { type: 'audio/mpeg' });
+            sounds[name] = audioBlob;
+        }
+
+        // Download sound file
+        function downloadSound(name) {
+            if (sounds[name]) {
+                const url = URL.createObjectURL(sounds[name]);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${name}.mp3`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } else {
+                alert('Please generate the sound first!');
+            }
+        }
+
+        // Test all sounds
+        function testAllSounds() {
+            generateNewOrderSound();
+            setTimeout(() => generateServiceRequestSound(), 1000);
+            setTimeout(() => generateUrgentSound(), 2000);
+        }
+
+        // Download all sounds
+        function downloadAllSounds() {
+            if (sounds['new-order'] && sounds['service-request'] && sounds['urgent']) {
+                downloadSound('new-order');
+                setTimeout(() => downloadSound('service-request'), 100);
+                setTimeout(() => downloadSound('urgent'), 200);
+            } else {
+                alert('Please generate all sounds first!');
+            }
+        }
+
+        // Alternative: Create simple audio files using Web Audio API
+        function createSimpleAudioFile(name, frequency, duration) {
+            initAudioContext();
+            
+            const sampleRate = 44100;
+            const samples = duration * sampleRate;
+            const audioBuffer = audioContext.createBuffer(1, samples, sampleRate);
+            const channelData = audioBuffer.getChannelData(0);
+            
+            for (let i = 0; i < samples; i++) {
+                const t = i / sampleRate;
+                channelData[i] = Math.sin(2 * Math.PI * frequency * t) * Math.exp(-t * 2);
+            }
+            
+            // Convert to WAV format (simplified)
+            const wavData = audioBufferToWav(audioBuffer);
+            const blob = new Blob([wavData], { type: 'audio/wav' });
+            sounds[name] = blob;
+        }
+
+        // Simple WAV encoder
+        function audioBufferToWav(buffer) {
+            const length = buffer.length;
+            const numberOfChannels = buffer.numberOfChannels;
+            const sampleRate = buffer.sampleRate;
+            const arrayBuffer = new ArrayBuffer(44 + length * numberOfChannels * 2);
+            const view = new DataView(arrayBuffer);
+            
+            // WAV header
+            const writeString = (offset, string) => {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            };
+            
+            writeString(0, 'RIFF');
+            view.setUint32(4, 36 + length * numberOfChannels * 2, true);
+            writeString(8, 'WAVE');
+            writeString(12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, numberOfChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * numberOfChannels * 2, true);
+            view.setUint16(32, numberOfChannels * 2, true);
+            view.setUint16(34, 16, true);
+            writeString(36, 'data');
+            view.setUint32(40, length * numberOfChannels * 2, true);
+            
+            // Audio data
+            const channelData = buffer.getChannelData(0);
+            let offset = 44;
+            for (let i = 0; i < length; i++) {
+                const sample = Math.max(-1, Math.min(1, channelData[i]));
+                view.setInt16(offset, sample * 0x7FFF, true);
+                offset += 2;
+            }
+            
+            return arrayBuffer;
+        }
+
+        // Update the generation functions to create actual downloadable files
+        function generateNewOrderSound() {
+            const status = document.getElementById('status-new-order');
+            status.innerHTML = '<div class="status">Generating new order sound...</div>';
+            
+            try {
+                createSimpleAudioFile('new-order', 800, 0.5);
+                status.innerHTML = '<div class="status success">✅ New order sound generated successfully!</div>';
+                document.getElementById('download-new-order').disabled = false;
+            } catch (error) {
+                status.innerHTML = '<div class="status error">❌ Error generating sound: ' + error.message + '</div>';
+            }
+        }
+
+        function generateServiceRequestSound() {
+            const status = document.getElementById('status-service-request');
+            status.innerHTML = '<div class="status">Generating service request sound...</div>';
+            
+            try {
+                createSimpleAudioFile('service-request', 600, 0.4);
+                status.innerHTML = '<div class="status success">✅ Service request sound generated successfully!</div>';
+                document.getElementById('download-service-request').disabled = false;
+            } catch (error) {
+                status.innerHTML = '<div class="status error">❌ Error generating sound: ' + error.message + '</div>';
+            }
+        }
+
+        function generateUrgentSound() {
+            const status = document.getElementById('status-urgent');
+            status.innerHTML = '<div class="status">Generating urgent sound...</div>';
+            
+            try {
+                createSimpleAudioFile('urgent', 400, 0.3);
+                status.innerHTML = '<div class="status success">✅ Urgent sound generated successfully!</div>';
+                document.getElementById('download-urgent').disabled = false;
+            } catch (error) {
+                status.innerHTML = '<div class="status error">❌ Error generating sound: ' + error.message + '</div>';
+            }
+        }
+    </script>
+</body>
+</html> 

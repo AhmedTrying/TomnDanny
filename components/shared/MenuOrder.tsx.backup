@@ -1,0 +1,1406 @@
+"use client"
+
+import { useEffect, useState, useRef } from "react"
+import { useSearchParams } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import { supabase } from "@/lib/supabase"
+import { Search, Star, Plus, ShoppingCart, Loader2, CheckCircle, Tag, X } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+
+interface Product {
+  id: string
+  name: string
+  description: string
+  price: number
+  image_url: string
+  category: string
+  rating: number
+  reviews_count: number
+  stock_quantity?: number
+  track_stock?: boolean
+  ribbon_text?: string
+  ribbon_color?: string
+}
+
+interface AddOn {
+  id: string
+  product_id: string
+  name: string
+  price: number
+  active: boolean
+}
+
+interface CartItem extends Product {
+  quantity: number
+  size: "S" | "M" | "L"
+  notes?: string
+  item_total: number
+  selectedAddOns?: any[]
+}
+
+interface DiscountCode {
+  id: string
+  code: string
+  description: string
+  type: "percentage" | "fixed"
+  value: number
+  min_order_amount: number
+  usage_limit: number
+  usage_count: number
+  active: boolean
+  expires_at: string
+  applies_to?: string[]
+}
+
+interface Customer {
+  id: string
+  name: string
+  phone: string
+  email?: string
+  address?: string
+  loyalty_points: number
+  total_orders: number
+  total_spent: number
+}
+
+interface MenuOrderProps {
+  tableNumber?: number | string
+  onOrderPlaced?: () => void
+  showTableInput?: boolean
+  showOrderType?: boolean
+  orderTypeDefault?: "dine_in" | "takeaway" | "reservation"
+  promoBanner?: React.ReactNode
+  locationInfo?: React.ReactNode
+  quickProducts?: Product[]
+  selectedCustomer?: Customer | null
+  onCustomerChange?: (customer: Customer | null) => void
+  isPOSMode?: boolean
+}
+
+export default function MenuOrder({
+  tableNumber: initialTableNumber = 1,
+  onOrderPlaced,
+  showTableInput = false,
+  showOrderType = false,
+  orderTypeDefault = "dine_in",
+  promoBanner,
+  locationInfo,
+  quickProducts = [],
+  selectedCustomer,
+  onCustomerChange,
+  isPOSMode = false,
+}: MenuOrderProps) {
+  const [products, setProducts] = useState<Product[]>([])
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
+  const [categories, setCategories] = useState<string[]>([])
+  const [selectedCategory, setSelectedCategory] = useState<string>("All")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [cart, setCart] = useState<CartItem[]>([])
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [selectedSize, setSelectedSize] = useState<"S" | "M" | "L">("M")
+  const [productNotes, setProductNotes] = useState("")
+  const [globalOrderNotes, setGlobalOrderNotes] = useState("")
+  const [tableNumber, setTableNumber] = useState(initialTableNumber)
+  const [orderType, setOrderType] = useState<"dine_in" | "takeaway" | "reservation">(orderTypeDefault)
+  const [loading, setLoading] = useState(true)
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false)
+  const [orderSuccess, setOrderSuccess] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "visa" | "master" | "qr">("cash")
+  const [paymentScreenshot, setPaymentScreenshot] = useState<File | null>(null)
+  const [cashReceived, setCashReceived] = useState<string>("")
+  
+  // Customer information states
+  const [customerName, setCustomerName] = useState("")
+  const [customerPhone, setCustomerPhone] = useState("")
+  const [customerEmail, setCustomerEmail] = useState("")
+  const [fees, setFees] = useState<any[]>([])
+  const [availableDiscounts, setAvailableDiscounts] = useState<DiscountCode[]>([])
+  const [selectedDiscount, setSelectedDiscount] = useState<DiscountCode | null>(null)
+  const [discountCode, setDiscountCode] = useState("")
+  const [discountError, setDiscountError] = useState<string | null>(null)
+  const [discountLoading, setDiscountLoading] = useState(false)
+  const [manualDiscountAmount, setManualDiscountAmount] = useState("")
+  const [manualDiscountReason, setManualDiscountReason] = useState("")
+  const [editingItem, setEditingItem] = useState<{ id: string; size: string; notes?: string; selectedAddOns?: any[] } | null>(null)
+  const [editItemNotes, setEditItemNotes] = useState("")
+  const [productAddOns, setProductAddOns] = useState<AddOn[]>([])
+  const [selectedAddOns, setSelectedAddOns] = useState<AddOn[]>([])
+  const [isCartExpanded, setIsCartExpanded] = useState(isPOSMode)
+  const searchParams = useSearchParams()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    fetchProducts()
+    fetchAvailableDiscounts()
+    fetchFees()
+  }, [])
+
+  useEffect(() => {
+    filterProducts()
+  }, [products, selectedCategory, searchQuery])
+
+  // Ensure cart is always expanded in POS mode
+  useEffect(() => {
+    if (isPOSMode) {
+      setIsCartExpanded(true)
+    }
+  }, [isPOSMode])
+
+  useEffect(() => {
+    setTableNumber(initialTableNumber)
+  }, [initialTableNumber])
+
+  useEffect(() => {
+    if (editingItem) {
+      setEditItemNotes(editingItem.notes || "")
+    }
+  }, [editingItem])
+
+  useEffect(() => {
+    if (selectedProduct) {
+      fetchProductAddOns(selectedProduct.id)
+      setSelectedAddOns([])
+    }
+  }, [selectedProduct])
+
+  const fetchProducts = async () => {
+    try {
+      const { data, error } = await supabase.from("products").select("*")
+      if (error) throw error
+      setProducts(data || [])
+    } catch (error) {
+      console.error("Error fetching products:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const filterProducts = () => {
+    let filtered = products
+    if (selectedCategory !== "All") {
+      filtered = filtered.filter((product) => product.category === selectedCategory)
+    }
+    if (searchQuery) {
+      filtered = filtered.filter((product) =>
+        product.name.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    }
+    setFilteredProducts(filtered)
+    const uniqueCategories = Array.from(new Set(products.map((product) => product.category)))
+    setCategories(["All", ...uniqueCategories])
+  }
+
+  const addToCart = async (product: Product, size: "S" | "M" | "L" = "M", notes?: string, addOns: AddOn[] = []) => {
+    setIsPlacingOrder(true)
+    
+    try {
+      const addOnsTotal = addOns.reduce((total, addOn) => total + addOn.price, 0)
+      const itemPrice = getSizePrice(product.price, size) + addOnsTotal
+      
+      const existingItemIndex = cart.findIndex(
+        (item) => item.id === product.id && item.size === size && item.notes === notes && 
+        JSON.stringify(item.selectedAddOns) === JSON.stringify(addOns)
+      )
+      
+      if (existingItemIndex >= 0) {
+        const updatedCart = [...cart]
+        updatedCart[existingItemIndex].quantity += 1
+        updatedCart[existingItemIndex].item_total = updatedCart[existingItemIndex].quantity * itemPrice
+        setCart(updatedCart)
+      } else {
+        const newItem: CartItem = {
+          ...product,
+          quantity: 1,
+          size,
+          notes,
+          item_total: itemPrice,
+          selectedAddOns: addOns
+        }
+        setCart([...cart, newItem])
+      }
+      setSelectedProduct(null)
+      setProductNotes("")
+      setSelectedAddOns([])
+    } catch (error) {
+      console.error("Error adding to cart:", error)
+    } finally {
+      setIsPlacingOrder(false)
+    }
+  }
+
+  const updateCartQuantity = (id: string, size: string, notes: string | undefined, change: number, addOns?: any[]) => {
+    const updatedCart = cart
+      .map((item) => {
+        if (item.id === id && item.size === size && item.notes === notes && 
+            JSON.stringify(item.selectedAddOns) === JSON.stringify(addOns || item.selectedAddOns)) {
+          const newQuantity = Math.max(0, item.quantity + change)
+          if (newQuantity === 0) {
+            return null
+          }
+          const addOnsTotal = (item.selectedAddOns || []).reduce((total, addOn) => total + addOn.price, 0)
+          const itemPrice = getSizePrice(item.price, item.size) + addOnsTotal
+          return {
+            ...item,
+            quantity: newQuantity,
+            item_total: newQuantity * itemPrice
+          }
+        }
+        return item
+      })
+      .filter(Boolean) as CartItem[]
+    setCart(updatedCart)
+  }
+
+  const removeFromCart = (id: string, size: string, notes: string | undefined, addOns?: any[]) => {
+    setCart(cart.filter((item) => !(item.id === id && item.size === size && item.notes === notes && 
+      JSON.stringify(item.selectedAddOns) === JSON.stringify(addOns || item.selectedAddOns))))
+  }
+
+  const getCartTotal = () => {
+    return cart.reduce((total, item) => total + item.item_total, 0)
+  }
+
+  const getCartItemCount = () => {
+    return cart.reduce((total, item) => total + item.quantity, 0)
+  }
+
+  const handlePaymentProofChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setPaymentScreenshot(file)
+    } else {
+      setPaymentScreenshot(null)
+    }
+  }
+
+  const placeOrder = async () => {
+    if (cart.length === 0) return
+    
+    setIsPlacingOrder(true)
+    try {
+      let paymentProofUrl = null
+      if (paymentMethod === 'qr' && paymentScreenshot) {
+        const fileExt = paymentScreenshot.name.split('.').pop()
+        const fileName = `payment-proof-${Date.now()}.${fileExt}`
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('payment-proofs')
+          .upload(fileName, paymentScreenshot)
+        
+        if (uploadError) {
+          console.error('Error uploading payment proof:', uploadError)
+          throw new Error('Failed to upload payment proof')
+        }
+        
+        const { data: { publicUrl } } = supabase.storage
+          .from('payment-proofs')
+          .getPublicUrl(fileName)
+        
+        paymentProofUrl = publicUrl
+      }
+      
+      const orderItems = cart.map((item) => ({
+        product_id: item.id,
+        product_name: item.name,
+        quantity: item.quantity,
+        size: item.size,
+        price: getSizePrice(item.price, item.size),
+        notes: item.notes || null,
+        item_total: item.item_total,
+        selected_addons: item.selectedAddOns || []
+      }))
+      
+      const subtotal = getCartTotal()
+      const serviceCharge = subtotal * 0.06
+      const tax = subtotal * 0.10
+      const discountAmount = getDiscountAmount()
+      const finalTotal = subtotal + serviceCharge + tax - discountAmount
+      
+      const orderData = {
+        table_number: tableNumber,
+        order_type: orderType,
+        items: orderItems,
+        total_amount: finalTotal,
+        subtotal: subtotal,
+        fees_total: serviceCharge + tax,
+        discount_amount: discountAmount,
+        discount_code: selectedDiscount?.code || null,
+        notes: globalOrderNotes || null,
+        payment_method: paymentMethod,
+        payment_proof_url: paymentProofUrl,
+        cash_received: paymentMethod === 'cash' ? parseFloat(cashReceived) || null : null,
+        change_due: paymentMethod === 'cash' ? getChangeDue() : null,
+        customer_id: selectedCustomer?.id || null,
+        customer_name: (orderType === "takeaway" || orderType === "reservation") ? customerName : null,
+        customer_phone: (orderType === "takeaway" || orderType === "reservation") ? customerPhone : null,
+        customer_email: (orderType === "takeaway" || orderType === "reservation") ? customerEmail : null,
+        status: "pending"
+      }
+      
+      const { data, error } = await supabase.from("orders").insert([orderData]).select()
+      if (error) throw error
+      
+      if (selectedCustomer && isPOSMode) {
+        const newTotalSpent = selectedCustomer.total_spent + getFinalTotal()
+        const newTotalOrders = selectedCustomer.total_orders + 1
+        await supabase
+          .from('customers')
+          .update({
+            total_spent: newTotalSpent,
+            total_orders: newTotalOrders
+          })
+          .eq('id', selectedCustomer.id)
+        
+        if (onCustomerChange) {
+          const updatedCustomer = {
+            ...selectedCustomer,
+            total_spent: newTotalSpent,
+            total_orders: newTotalOrders
+          }
+          onCustomerChange(updatedCustomer)
+        }
+      }
+      
+      setOrderSuccess(true)
+      setCart([])
+      setGlobalOrderNotes("")
+      setSelectedDiscount(null)
+      setCashReceived("")
+      setPaymentScreenshot(null)
+      
+      setTimeout(() => {
+        setOrderSuccess(false)
+        if (onOrderPlaced) {
+          onOrderPlaced()
+        }
+      }, 3000)
+      
+      if (selectedDiscount && selectedDiscount.id !== "manual") {
+        await supabase
+          .from("discount_codes")
+          .update({ usage_count: selectedDiscount.usage_count + 1 })
+          .eq("id", selectedDiscount.id)
+      }
+    } catch (error: any) {
+      console.error("Error placing order:", error)
+      alert("Failed to place order. Please try again.")
+    } finally {
+      setIsPlacingOrder(false)
+    }
+  }
+
+  const getSizePrice = (basePrice: number, size: "S" | "M" | "L") => {
+    const multipliers = { S: 0.8, M: 1, L: 1.2 }
+    return basePrice * multipliers[size]
+  }
+
+  const fetchAvailableDiscounts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("discount_codes")
+        .select("*")
+        .eq("active", true)
+        .gte("expires_at", new Date().toISOString())
+      
+      setAvailableDiscounts(data || [])
+    } catch (error) {
+      console.error("Failed to fetch discounts:", error)
+    }
+  }
+
+  const fetchFees = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("fees")
+        .select("*")
+        .eq("active", true)
+      
+      if (error) throw error
+      setFees(data || [])
+    } catch (error) {
+      console.error("Error fetching fees:", error)
+    }
+  }
+
+  const fetchProductAddOns = async (productId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('product_add_ons')
+        .select('*')
+        .eq('product_id', productId)
+        .eq('active', true)
+
+      if (error) throw error
+      setProductAddOns(data || [])
+    } catch (error) {
+      console.error('Error fetching add-ons:', error)
+      setProductAddOns([])
+    }
+  }
+
+  const applyDiscountCode = async () => {
+    if (!discountCode.trim()) {
+      setDiscountError("Please enter a discount code")
+      return
+    }
+    setDiscountLoading(true)
+    setDiscountError(null)
+    try {
+      const { data, error } = await supabase
+        .from("discount_codes")
+        .select("*")
+        .eq("code", discountCode.trim().toUpperCase())
+        .eq("active", true)
+        .gte("expires_at", new Date().toISOString())
+        .single()
+      if (error || !data) {
+        setDiscountError("Invalid or expired discount code")
+        return
+      }
+      if (!Array.isArray(data.applies_to) || !data.applies_to.includes(orderType)) {
+        setDiscountError("This discount is not valid for this order type.")
+        return
+      }
+      const subtotal = getCartTotal()
+      if (subtotal < data.min_order_amount) {
+        setDiscountError(`Minimum order amount is RM${data.min_order_amount.toFixed(2)}`)
+        return
+      }
+      if (data.usage_count >= data.usage_limit) {
+        setDiscountError("This discount code has reached its usage limit")
+        return
+      }
+      setSelectedDiscount(data)
+      setDiscountCode("")
+      setDiscountError(null)
+    } catch (error) {
+      setDiscountError("Failed to apply discount code")
+    } finally {
+      setDiscountLoading(false)
+    }
+  }
+
+  const applyManualDiscount = () => {
+    const amount = parseFloat(manualDiscountAmount)
+    if (isNaN(amount) || amount <= 0) {
+      setDiscountError("Please enter a valid discount amount")
+      return
+    }
+
+    const subtotal = getCartTotal()
+    if (amount > subtotal) {
+      setDiscountError("Discount amount cannot exceed order total")
+      return
+    }
+
+    const manualDiscount: DiscountCode = {
+      id: "manual",
+      code: "MANUAL",
+      description: manualDiscountReason || "Manual discount",
+      type: "fixed",
+      value: amount,
+      min_order_amount: 0,
+      usage_limit: 1,
+      usage_count: 0,
+      active: true,
+      expires_at: new Date().toISOString(),
+    }
+
+    setSelectedDiscount(manualDiscount)
+    setManualDiscountAmount("")
+    setManualDiscountReason("")
+    setDiscountError(null)
+  }
+
+ const removeDiscount = () => {
+    setSelectedDiscount(null)
+    setDiscountCode("")
+    setDiscountError(null)
+  }
+
+  const toggleAddOn = (addOn: AddOn) => {
+    setSelectedAddOns(prev => {
+      const isSelected = prev.find(item => item.id === addOn.id)
+      if (isSelected) {
+        return prev.filter(item => item.id !== addOn.id)
+      } else {
+        return [...prev, addOn]
+      }
+    })
+  }
+
+  const getAddOnsTotal = () => {
+    return selectedAddOns.reduce((total, addOn) => total + addOn.price, 0)
+  }
+  const getDiscountAmount = () => {
+    if (!selectedDiscount) return 0
+    const subtotal = getCartTotal()
+    if (selectedDiscount.type === "percentage") {
+      return (subtotal * selectedDiscount.value) / 100
+    } else {
+      return selectedDiscount.value
+    }
+  }
+
+  const getApplicableFees = () => {
+    const subtotal = getCartTotal()
+    return fees
+      .filter(fee => fee.applies_to === orderType || fee.applies_to === "both")
+      .reduce((total, fee) => {
+        if (fee.type === "percentage") {
+          return total + (subtotal * fee.amount) / 100
+        }
+        return total + fee.amount
+      }, 0)
+  }
+
+  const getFinalTotal = () => {
+    const subtotal = getCartTotal()
+    const feesTotal = getApplicableFees()
+    const discount = getDiscountAmount()
+    return Math.max(0, subtotal + feesTotal - discount)
+  }
+
+  const getChangeDue = () => {
+    const received = parseFloat(cashReceived) || 0
+    const total = getFinalTotal()
+    return received - total
+  }
+
+  const updateCartItemNotes = (itemId: string, size: string, oldNotes: string | undefined, newNotes: string, addOns?: any[]) => {
+    const updatedCart = cart.map(item => {
+      if (item.id === itemId && item.size === size && item.notes === oldNotes && 
+          JSON.stringify(item.selectedAddOns) === JSON.stringify(addOns || item.selectedAddOns)) {
+        return { ...item, notes: newNotes }
+      }
+      return item
+    })
+    setCart(updatedCart)
+    setEditingItem(null)
+    setEditItemNotes("")
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center animate-pulse mx-auto mb-4">
+            <span className="text-lg font-bold text-white">&</span>
+          </div>
+          <p className="text-gray-600">Loading menu...</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative w-full h-full bg-white">
+      {/* Main Menu Area */}
+      <div className="w-full overflow-y-auto">
+        {/* Optional location info */}
+        {locationInfo}
+        {/* Optional promo banner */}
+        {promoBanner}
+        
+        {/* Search and Filter Section */}
+        <div className="p-4 bg-white border-b">
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Input
+              type="text"
+              placeholder="Search menu items..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          
+          {/* Category Filter */}
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {categories.map((category) => (
+              <Button
+                key={category}
+                variant={selectedCategory === category ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedCategory(category)}
+                className={`whitespace-nowrap transition-all duration-200 px-4 py-2 text-sm font-medium min-h-[36px] rounded-md ${
+                  selectedCategory === category
+                    ? "bg-gray-900 text-white shadow-md"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                }`}
+              >
+                {category}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {/* Products Grid */}
+        <div className="p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filteredProducts.map((product) => (
+              <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow duration-200 relative">
+                {product.ribbon_text && (
+                  <div className={`absolute top-2 right-2 z-10 px-2 py-1 text-xs font-bold text-white rounded-full ${
+                    product.ribbon_color === 'red' ? 'bg-red-500' :
+                    product.ribbon_color === 'green' ? 'bg-green-500' :
+                    product.ribbon_color === 'blue' ? 'bg-blue-500' :
+                    product.ribbon_color === 'yellow' ? 'bg-yellow-500' :
+                    product.ribbon_color === 'purple' ? 'bg-purple-500' :
+                    'bg-gray-500'
+                  }`}>
+                    {product.ribbon_text}
+                  </div>
+                )}
+                <CardContent className="p-0">
+                  <div className="relative">
+                    <img
+                      src={product.image_url || "/placeholder.jpg"}
+                      alt={product.name}
+                      className="w-full h-48 object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-10 transition-all duration-200" />
+                  </div>
+                  <div className="p-4">
+                    <h3 className="font-semibold text-lg mb-2 leading-tight min-h-[3rem] flex items-center">{product.name}</h3>
+                    <p className="text-gray-600 text-sm mb-3 line-clamp-2">{product.description}</p>
+                    
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-1">
+                        <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                        <span className="text-sm font-medium">{product.rating}</span>
+                        <span className="text-xs text-gray-500">({product.reviews_count})</span>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-gray-900">RM{product.price.toFixed(2)}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedProduct(product)
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Customize
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="flex-1"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          addToCart(product)
+                        }}
+                      >
+                        Add to Cart
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Cart Sidebar - Fixed on the right */}
+      <div className={`${isPOSMode ? 'fixed top-0 right-0 h-full w-96 bg-white border-l shadow-lg z-50' : `fixed top-0 right-0 h-full w-96 bg-white border-l shadow-lg z-50 transform transition-transform duration-300 ${isCartExpanded ? 'translate-x-0' : 'translate-x-full'}`}`}>
+        {/* Cart Header */}
+        <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+          <div className="flex items-center gap-2">
+            <ShoppingCart className="h-5 w-5" />
+            <span className="font-semibold">
+              Cart ({getCartItemCount()} item{getCartItemCount() !== 1 ? 's' : ''})
+            </span>
+          </div>
+          {!isPOSMode && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setIsCartExpanded(false)}
+              className="h-8 w-8 p-0"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+        
+        {/* Cart Content - Scrollable */}
+        <div className="flex flex-col h-full">
+          <div className="flex-1 overflow-y-auto p-4 pb-0">
+            {/* Order Summary Header */}
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Order Summary</h3>
+              <p className="text-sm text-gray-500">#{Math.random().toString(36).substr(2, 6).toUpperCase()}</p>
+            </div>
+
+            {/* Cart Items */}
+            {cart.length > 0 ? (
+              <div className="space-y-3 mb-6">
+                {cart.map((item, index) => (
+                  <div key={`${item.id}-${item.size}-${item.notes}-${index}`} className="flex items-center gap-3 p-3 bg-white border border-gray-100 rounded-lg hover:shadow-sm transition-shadow">
+                    {/* Product Image */}
+                    <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+                      <img
+                        src={item.image_url || "/placeholder.jpg"}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    
+                    {/* Product Details */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h4 className="font-medium text-sm text-gray-900 truncate">{item.name}</h4>
+                          <div className="text-xs text-gray-500 space-y-1 mt-1">
+                            <p>Size: {item.size}</p>
+                            {item.selectedAddOns && item.selectedAddOns.length > 0 && (
+                              <p className="truncate">+{item.selectedAddOns.map(addOn => addOn.name).join(", ")}</p>
+                            )}
+                            {item.notes && (
+                              <p className="italic truncate">Note: {item.notes}</p>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Edit and Remove Buttons */}
+                        <div className="flex items-center gap-1 ml-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingItem({
+                                id: item.id,
+                                size: item.size,
+                                notes: item.notes,
+                                selectedAddOns: item.selectedAddOns
+                              })
+                            }}
+                            className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
+                          >
+                            ✏️
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => removeFromCart(item.id, item.size, item.notes, item.selectedAddOns)}
+                            className="h-6 w-6 p-0 text-gray-400 hover:text-red-500"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      {/* Quantity and Price */}
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateCartQuantity(item.id, item.size, item.notes, -1, item.selectedAddOns)}
+                            className="h-6 w-6 p-0 border-gray-200"
+                          >
+                            -
+                          </Button>
+                          <span className="text-sm font-medium w-6 text-center">{item.quantity}</span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateCartQuantity(item.id, item.size, item.notes, 1, item.selectedAddOns)}
+                            className="h-6 w-6 p-0 border-gray-200"
+                          >
+                            +
+                          </Button>
+                        </div>
+                        <span className="font-semibold text-sm text-gray-900">RM{item.item_total.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-400">
+                <ShoppingCart className="h-16 w-16 mx-auto mb-4 opacity-30" />
+                <p className="text-lg font-medium">Your cart is empty</p>
+                <p className="text-sm">Add items from the menu to get started</p>
+              </div>
+            )}
+            
+            {cart.length > 0 && (
+              <>
+               
+                {/* Order Type and Table Number */}
+                {(showOrderType || showTableInput || isPOSMode) && (
+                  <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+                    <div className="space-y-4">
+                      {(showOrderType || isPOSMode) && (
+                        <div>
+                          <Label htmlFor="orderType" className="text-sm font-medium text-gray-900 mb-2 block">
+                            Order Type
+                          </Label>
+                          <Select value={orderType} onValueChange={(value: "dine_in" | "takeaway" | "reservation") => setOrderType(value)}>
+                            <SelectTrigger className="h-11">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="dine_in">Dine In</SelectItem>
+                              <SelectItem value="takeaway">Takeaway</SelectItem>
+                              <SelectItem value="reservation">Reservation</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      
+                      {(showTableInput || isPOSMode) && (
+                        <div>
+                          <Label htmlFor="tableNumber" className="text-sm font-medium text-gray-900 mb-2 block">
+                            Select Table
+                          </Label>
+                          <Select value={tableNumber.toString()} onValueChange={(value) => setTableNumber(value)}>
+                            <SelectTrigger className="h-11">
+                              <SelectValue placeholder="Choose table" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from({length: 20}, (_, i) => i + 1).map(num => (
+                                <SelectItem key={num} value={num.toString()}>
+                                  A-{num.toString().padStart(2, '0')}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Customer Information for Takeaway/Delivery */}
+                {(orderType === "takeaway" || orderType === "reservation") && (
+                  <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+                    <h4 className="font-medium text-sm text-gray-900 mb-4">Customer Information</h4>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="customerName" className="text-sm font-medium text-gray-900 mb-2 block">
+                          Customer Name
+                        </Label>
+                        <Input
+                          id="customerName"
+                          placeholder="Enter customer name"
+                          value={customerName}
+                          onChange={(e) => setCustomerName(e.target.value)}
+                          className="h-11"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="customerPhone" className="text-sm font-medium text-gray-900 mb-2 block">
+                          Phone Number
+                        </Label>
+                        <Input
+                          id="customerPhone"
+                          placeholder="Enter phone number"
+                          value={customerPhone}
+                          onChange={(e) => setCustomerPhone(e.target.value)}
+                          className="h-11"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="customerEmail" className="text-sm font-medium text-gray-900 mb-2 block">
+                          Email (Optional)
+                        </Label>
+                        <Input
+                          id="customerEmail"
+                          type="email"
+                          placeholder="Enter email address"
+                          value={customerEmail}
+                          onChange={(e) => setCustomerEmail(e.target.value)}
+                          className="h-11"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Discount Section */}
+                {isPOSMode && (
+                  <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <Label className="text-sm font-medium text-gray-900">Discount</Label>
+                      {selectedDiscount && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={removeDiscount}
+                          className="text-red-500 hover:text-red-700 p-1 h-8 w-8"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    
+                    {selectedDiscount ? (
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                        <p className="font-medium text-green-700 text-sm">{selectedDiscount.description}</p>
+                        <p className="text-green-600 text-sm mt-1">
+                          {selectedDiscount.type === "percentage" 
+                            ? `${selectedDiscount.value}% off` 
+                            : `RM${selectedDiscount.value.toFixed(2)} off`}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Enter discount code"
+                            value={discountCode}
+                            onChange={(e) => setDiscountCode(e.target.value)}
+                            className="flex-1 h-11"
+                          />
+                          <Button
+                            onClick={applyDiscountCode}
+                            disabled={discountLoading}
+                            className="h-11 px-4"
+                          >
+                            {discountLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply"}
+                          </Button>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Manual discount amount"
+                            value={manualDiscountAmount}
+                            onChange={(e) => setManualDiscountAmount(e.target.value)}
+                            type="number"
+                            step="0.01"
+                            className="flex-1 h-11"
+                          />
+                          <Input
+                            placeholder="Reason (optional)"
+                            value={manualDiscountReason}
+                            onChange={(e) => setManualDiscountReason(e.target.value)}
+                            className="flex-1 h-11"
+                          />
+                          <Button
+                            onClick={applyManualDiscount}
+                            className="h-11 px-4"
+                          >
+                            Apply
+                          </Button>
+                        </div>
+                        
+                        {availableDiscounts.length > 0 && (
+                          <Select onValueChange={(value) => {
+                            const discount = availableDiscounts.find(d => d.id === value)
+                            if (discount) {
+                              setSelectedDiscount(discount)
+                            }
+                          }}>
+                            <SelectTrigger className="h-11">
+                              <SelectValue placeholder="Select available discount" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableDiscounts.map((discount) => (
+                                <SelectItem key={discount.id} value={discount.id}>
+                                  {discount.description} - {discount.type === "percentage" 
+                                    ? `${discount.value}%` 
+                                    : `RM${discount.value}`} off
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
+                    )}
+                    
+                    {discountError && (
+                      <p className="text-red-500 text-sm mt-2 bg-red-50 border border-red-200 rounded p-2">{discountError}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Financial Summary */}
+                <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Subtotal</span>
+                      <span className="font-medium">RM{getCartTotal().toFixed(2)}</span>
+                    </div>
+                    
+                    {/* Dynamic Fees from Database */}
+                    {fees
+                      .filter(fee => fee.applies_to === orderType || fee.applies_to === "both")
+                      .map(fee => {
+                        const feeAmount = fee.type === "percentage" 
+                          ? (getCartTotal() * fee.amount) / 100 
+                          : fee.amount
+                        return (
+                          <div key={fee.id} className="flex justify-between text-sm">
+                            <span className="text-gray-600">{fee.name}</span>
+                            <span className="font-medium">RM{feeAmount.toFixed(2)}</span>
+                          </div>
+                        )
+                      })
+                    }
+                    
+                    {selectedDiscount && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-green-600">Discount</span>
+                        <span className="font-medium text-green-600">-RM{getDiscountAmount().toFixed(2)}</span>
+                      </div>
+                    )}
+                    
+                    <div className="border-t border-gray-200 pt-3">
+                      <div className="flex justify-between">
+                        <span className="font-semibold text-gray-900">Total Payment</span>
+                        <span className="font-bold text-lg text-gray-900">RM{getFinalTotal().toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Method */}
+                {isPOSMode && (
+                  <div className="mb-4">
+                    <Label className="text-sm font-medium mb-3 block text-gray-900">Payment Method</Label>
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <Button
+                        size="default"
+                        variant={paymentMethod === "cash" ? "default" : "outline"}
+                        onClick={() => setPaymentMethod("cash")}
+                        className={`h-12 font-medium ${
+                          paymentMethod === "cash" 
+                            ? "bg-gray-900 text-white hover:bg-gray-800" 
+                            : "border-gray-200 text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        Cash
+                      </Button>
+                      <Button
+                        size="default"
+                        variant={paymentMethod === "visa" ? "default" : "outline"}
+                        onClick={() => setPaymentMethod("visa")}
+                        className={`h-12 font-medium ${
+                          paymentMethod === "visa" 
+                            ? "bg-gray-900 text-white hover:bg-gray-800" 
+                            : "border-gray-200 text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        Visa
+                      </Button>
+                      <Button
+                        size="default"
+                        variant={paymentMethod === "master" ? "default" : "outline"}
+                        onClick={() => setPaymentMethod("master")}
+                        className={`h-12 font-medium ${
+                          paymentMethod === "master" 
+                            ? "bg-gray-900 text-white hover:bg-gray-800" 
+                            : "border-gray-200 text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        Master
+                      </Button>
+                      <Button
+                        size="default"
+                        variant={paymentMethod === "qr" ? "default" : "outline"}
+                        onClick={() => setPaymentMethod("qr")}
+                        className={`h-12 font-medium ${
+                          paymentMethod === "qr" 
+                            ? "bg-gray-900 text-white hover:bg-gray-800" 
+                            : "border-gray-200 text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        QR Payment
+                      </Button>
+                    </div>
+                    
+                    {paymentMethod === "cash" && (
+                      <div className="space-y-2">
+                        <Input
+                          placeholder="Cash received"
+                          value={cashReceived}
+                          onChange={(e) => setCashReceived(e.target.value)}
+                          type="number"
+                          step="0.01"
+                        />
+                        {cashReceived && (
+                          <div className="text-sm">
+                            <p>Total: RM{getFinalTotal().toFixed(2)}</p>
+                            <p className={`font-bold ${
+                              getChangeDue() >= 0 ? "text-green-600" : "text-red-600"
+                            }`}>
+                              {getChangeDue() >= 0 
+                                ? `Change: RM${getChangeDue().toFixed(2)}`
+                                : `Remaining: RM${Math.abs(getChangeDue()).toFixed(2)}`
+                              }
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {paymentMethod === "qr" && (
+                      <div>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handlePaymentProofChange}
+                          className="hidden"
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-full"
+                        >
+                          {paymentScreenshot ? "Change Payment Proof" : "Upload Payment Proof"}
+                        </Button>
+                        {paymentScreenshot && (
+                          <p className="text-xs text-green-600 mt-1">
+                            ✓ {paymentScreenshot.name}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Order Notes */}
+                <div className="mb-4">
+                  <Label htmlFor="orderNotes" className="text-sm font-medium">
+                    Order Notes (Optional)
+                  </Label>
+                  <Textarea
+                    id="orderNotes"
+                    placeholder="Any special instructions..."
+                    value={globalOrderNotes}
+                    onChange={(e) => setGlobalOrderNotes(e.target.value)}
+                    rows={2}
+                  />
+                </div>
+
+              </>
+            )}
+          </div>
+          
+        </div>
+      </div>
+
+      {/* Fixed Bottom Section with Submit Order Button */}
+      {(cart.length > 0 || isPOSMode) && (
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 border bg-white p-4 rounded-lg shadow-lg z-50 max-w-md w-full">
+          <Button
+            onClick={placeOrder}
+            disabled={
+              isPlacingOrder || 
+              (!isPOSMode && cart.length === 0) || 
+              (paymentMethod === "cash" && getChangeDue() < 0)
+            }
+            className="w-full bg-green-600 hover:bg-green-700"
+            size="lg"
+          >
+            {isPlacingOrder ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Placing Order...
+              </>
+            ) : (
+              `Submit Order - RM${getFinalTotal().toFixed(2)}`
+            )}
+          </Button>
+        </div>
+      )}
+
+    </div>
+        </div>
+      </div>
+      
+      {/* Cart Toggle Button - Fixed bottom right */}
+      {cart.length > 0 && (
+        <Button
+          onClick={() => setIsCartExpanded(!isCartExpanded)}
+          className="fixed bottom-4 right-4 z-40 h-14 w-14 rounded-full shadow-lg"
+          size="lg"
+        >
+          <div className="flex flex-col items-center">
+            <ShoppingCart className="h-5 w-5" />
+            <span className="text-xs">{getCartItemCount()}</span>
+          </div>
+        </Button>
+      )}
+
+      {/* Product Customization Dialog */}
+      <Dialog open={!!selectedProduct} onOpenChange={() => setSelectedProduct(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Customize {selectedProduct?.name}</DialogTitle>
+          </DialogHeader>
+          
+          {selectedProduct && (
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Size</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {["S", "M", "L"].map((size) => (
+                    <Button
+                      key={size}
+                      size="sm"
+                      variant={selectedSize === size ? "default" : "outline"}
+                      onClick={() => setSelectedSize(size as "S" | "M" | "L")}
+                      className="flex flex-col h-auto py-2"
+                    >
+                      <span className="font-medium">{size}</span>
+                      <span className="text-xs">
+                        RM{getSizePrice(selectedProduct.price, size as "S" | "M" | "L").toFixed(2)}
+                      </span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Add-ons Section */}
+              {productAddOns.length > 0 && (
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Add-ons</Label>
+                  <div className="space-y-2 max-h-32 overflow-y-auto">
+                    {productAddOns.map((addOn) => (
+                      <div key={addOn.id} className="flex items-center justify-between p-2 border rounded">
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id={`addon-${addOn.id}`}
+                            checked={selectedAddOns.some(item => item.id === addOn.id)}
+                            onChange={() => toggleAddOn(addOn)}
+                            className="rounded"
+                          />
+                          <label htmlFor={`addon-${addOn.id}`} className="text-sm font-medium">
+                            {addOn.name}
+                          </label>
+                        </div>
+                        <span className="text-sm font-medium">+RM{addOn.price.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedAddOns.length > 0 && (
+                    <p className="text-sm text-gray-600 mt-2">
+                      Add-ons total: +RM{getAddOnsTotal().toFixed(2)}
+                    </p>
+                  )}
+                </div>
+              )}
+              
+              <div>
+                <Label htmlFor="productNotes" className="text-sm font-medium">
+                  Special Instructions
+                </Label>
+                <Textarea
+                  id="productNotes"
+                  placeholder="e.g., No onions, extra spicy..."
+                  value={productNotes}
+                  onChange={(e) => setProductNotes(e.target.value)}
+                  rows={3}
+                />
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setSelectedProduct(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedProduct) {
+                  addToCart(selectedProduct, selectedSize, productNotes || undefined, selectedAddOns)
+                }
+              }}
+            >
+              Add to Cart - RM{selectedProduct ? (getSizePrice(selectedProduct.price, selectedSize) + getAddOnsTotal()).toFixed(2) : "0.00"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Order Success Dialog */}
+      <Dialog open={orderSuccess} onOpenChange={() => setOrderSuccess(false)}>
+        <DialogContent className="max-w-md text-center">
+          <DialogHeader>
+            <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
+              <CheckCircle className="h-6 w-6 text-green-600" />
+            </div>
+            <DialogTitle>Order Placed Successfully!</DialogTitle>
+          </DialogHeader>
+          <p className="text-gray-600">
+            Your order has been received and is being prepared.
+          </p>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Item Notes Dialog */}
+      <Dialog open={!!editingItem} onOpenChange={() => setEditingItem(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Item Notes</DialogTitle>
+          </DialogHeader>
+          
+          <div>
+            <Label htmlFor="editNotes" className="text-sm font-medium">
+              Special Instructions
+            </Label>
+            <Textarea
+              id="editNotes"
+              placeholder="e.g., No onions, extra spicy..."
+              value={editItemNotes}
+              onChange={(e) => setEditItemNotes(e.target.value)}
+              rows={3}
+            />
+          </div>
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditingItem(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (editingItem) {
+                  updateCartItemNotes(editingItem.id, editingItem.size, editingItem.notes, editItemNotes, editingItem.selectedAddOns)
+                }
+              }}
+            >
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
