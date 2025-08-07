@@ -2,7 +2,7 @@
 
 > A modern, full-stack restaurant management system built with Next.js, TypeScript, and Supabase. Streamline your café operations with real-time order management, kitchen displays, staff coordination, and comprehensive analytics.
 
-![Project Banner]
+**Project Banner**
 <img width="1913" height="944" alt="image" src="https://github.com/user-attachments/assets/09557a1d-0e2b-49fa-8c50-2e70cd2026b8" />
 
 
@@ -70,19 +70,20 @@
 ## 📱 Screenshots
 
 ### Customer Menu Interface
-![Menu Interface](https://via.placeholder.com/800x600/F5F5DC/2C5F2D?text=Customer+Menu+Interface)
+<img width="1917" height="942" alt="image" src="https://github.com/user-attachments/assets/1fa3a49a-70cf-4178-80f4-0a1e5f402bfb" />
+
 *QR code-based menu ordering with real-time stock updates*
 
 ### Kitchen Display System
-![Kitchen Display](https://via.placeholder.com/800x600/2C5F2D/FFFFFF?text=Kitchen+Display+System)
+<img width="1918" height="942" alt="image" src="https://github.com/user-attachments/assets/056d9e92-b88c-4905-bde1-e1a27d973a3c" />
 *Real-time order management for kitchen staff*
 
 ### Admin Dashboard
-![Admin Dashboard](https://via.placeholder.com/800x600/8B4513/FFFFFF?text=Admin+Dashboard)
+<img width="1917" height="942" alt="image" src="https://github.com/user-attachments/assets/3743d610-9980-44b7-a69a-ad6cdaefeee9" />
 *Comprehensive analytics and management interface*
 
 ### POS System
-![POS Interface](https://via.placeholder.com/800x600/D2B48C/2C5F2D?text=POS+System)
+<img width="1919" height="947" alt="image" src="https://github.com/user-attachments/assets/9878768d-0eaa-4d47-8f68-1b6d00d42674" />
 *Streamlined cashier interface for order processing*
 
 ## 🚀 Quick Start
