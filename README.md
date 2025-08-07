@@ -2,7 +2,7 @@
 
 > A modern, full-stack restaurant management system built with Next.js, TypeScript, and Supabase. Streamline your café operations with real-time order management, kitchen displays, staff coordination, and comprehensive analytics.
 
-![Project Banner](https://via.placeholder.com/1200x400/2C5F2D/FFFFFF?text=Tomm%26Danny+Restaurant+Management+System)
+![Project Banner](<img width="1913" height="944" alt="image" src="https://github.com/user-attachments/assets/8d330464-54c7-4670-8388-96e6cf142d88" />)
 
 ## 🌟 Features
 
@@ -263,7 +263,7 @@ For support, email support@tommdanny.com or join our [Discord community](https:/
 ---
 
 <div align="center">
-  <strong>Built with ❤️ for the restaurant industry</strong>
+  <strong>Built with ❤️ for the Coffee Shop industry</strong>
   <br>
-  <sub>Making restaurant management simple and efficient</sub>
+  <sub>Making Coffee Shop management simple and efficient</sub>
 </div>
