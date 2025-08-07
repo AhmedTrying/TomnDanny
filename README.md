@@ -2,7 +2,9 @@
 
 > A modern, full-stack restaurant management system built with Next.js, TypeScript, and Supabase. Streamline your café operations with real-time order management, kitchen displays, staff coordination, and comprehensive analytics.
 
-![Project Banner](<img width="1913" height="944" alt="image" src="https://github.com/user-attachments/assets/8d330464-54c7-4670-8388-96e6cf142d88" />)
+![Project Banner]
+<img width="1913" height="944" alt="image" src="https://github.com/user-attachments/assets/09557a1d-0e2b-49fa-8c50-2e70cd2026b8" />
+
 
 ## 🌟 Features
 
