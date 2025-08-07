@@ -7,7 +7,9 @@
     "dev": "next dev",
     "lint": "next lint",
     "start": "next start",
-    "test:models": "node scripts/test-models.js"
+    "test:models": "node scripts/test-models.js",
+    "deploy:check": "node scripts/deploy-check.js",
+    "deploy:vercel": "npm run deploy:check && vercel --prod"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
