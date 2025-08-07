@@ -1,6 +1,7 @@
 # 🍕 Tomm&Danny - Coffee Shop Management System
 
 > A modern, full-stack restaurant management system built with Next.js, TypeScript, and Supabase. Streamline your café operations with real-time order management, kitchen displays, staff coordination, and comprehensive analytics.
+Visit us! https://v0-tom-and-danny.vercel.app/
 
 ![Project Banner]
 <img width="1913" height="944" alt="image" src="https://github.com/user-attachments/assets/09557a1d-0e2b-49fa-8c50-2e70cd2026b8" />
@@ -137,6 +138,7 @@
    ```
 
    Visit `http://localhost:3000` to see the application.
+   or https://v0-tom-and-danny.vercel.app/
 
 ### 🌐 Deploy to Vercel
 
