@@ -4,7 +4,6 @@
 
 ![Project Banner]
 <img width="1913" height="944" alt="image" src="https://github.com/user-attachments/assets/09557a1d-0e2b-49fa-8c50-2e70cd2026b8" />
-
 ## 🌟 Features
 
 ### 🛒 **Customer Experience**
@@ -89,7 +88,6 @@
 ### POS System
 ![POS Interface]
 <img width="1919" height="947" alt="image" src="https://github.com/user-attachments/assets/9878768d-0eaa-4d47-8f68-1b6d00d42674" />
-
 *Streamlined cashier interface for order processing*
 
 ## 🚀 Quick Start
@@ -171,7 +169,6 @@
    ```
 
 For detailed deployment instructions, see [VERCEL-DEPLOYMENT.md](VERCEL-DEPLOYMENT.md).
-
 ## 🧪 Testing
 
 The project includes a comprehensive testing suite for all database models:
